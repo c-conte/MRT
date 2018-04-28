@@ -23,7 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <MRT.h>
 
 extern "C" Plugin::Object *createRTXIPlugin(void) {
-	return new IAact();
+	return new MRT();
 }
 
 static DefaultGUIModel::variable_t vars[] =
@@ -32,25 +32,21 @@ static DefaultGUIModel::variable_t vars[] =
 	{ "Iout", "", DefaultGUIModel::OUTPUT, },
 	{ "Period (s)", "Amount of time current is injected at every step", DefaultGUIModel::PARAMETER
 		| DefaultGUIModel::DOUBLE, },
-	{ "Delay (s)", "Time until step starts from beginning of cycle",
-		DefaultGUIModel::PARAMETER | DefaultGUIModel::DOUBLE, },
 	{ "Current Range Start (pA)", "Starting current of the steps",
 		DefaultGUIModel::PARAMETER | DefaultGUIModel::DOUBLE, },
 	{ "Current Range End (pA)", "Ending current of the steps", DefaultGUIModel::PARAMETER
 		| DefaultGUIModel::DOUBLE, },
-	{ "Increment (pA)", "How many steps to take between min and max",
+	{ "Increment (pA)", "How much the current increases on each step",
 		DefaultGUIModel::PARAMETER | DefaultGUIModel::UINTEGER, },
 	{ "Cycles (#)", "How many times to repeat the protocol",
 		DefaultGUIModel::PARAMETER | DefaultGUIModel::UINTEGER, },
-	{ "Down Time (s)", "The time between each step where IOUT is 0",
+	{ "Inter-Cycle-Interval (s)", "The time between each cycle where the protocol isn't running (Iout is 0)",
 		DefaultGUIModel::PARAMETER | DefaultGUIModel::DOUBLE, },
-	{ "Offset (mA)", "DC offset to add", DefaultGUIModel::PARAMETER
-		| DefaultGUIModel::DOUBLE, }, 
 };
 
 static size_t num_vars = sizeof(vars) / sizeof(DefaultGUIModel::variable_t);
 
-IAact::IAact(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::getInstance()->getPeriod() * 1e-6), period(0.25), delay(0.0), rStart(-100), rEnd(380), step_size(20), Ncycles(1), downtime(0), offset(0.0) {
+MRT::MRT(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::getInstance()->getPeriod() * 1e-6), period(0.25), rStart(-100), rEnd(380), step_size(20), Ncycles(1), ICI(5) {
 	setWhatsThis("<p><b>I-Step:</b><br>This module generates a series of currents in a designated range followed by a fixed maximum current.</p>");
 	createGUI(vars, num_vars);
 	update(INIT);
@@ -58,26 +54,25 @@ IAact::IAact(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::
 	resizeMe();
 }
 
-IAact::~IAact(void) {}
+MRT::~MRT(void) {}
 
-void IAact::execute(void) {
+void MRT::execute(void) {
 	V = input(0);  //V
 	int down = 0;
-	Iout = offset;
+	Iout = 0;
 	if (cycle < Ncycles) // if the program isn't done cycling
  {
-		//Do all time keeping in seconds.
 		if (step < rEnd + step_size) // if the current output is less highest desired output
-		{
-			if (age <= downtime) // timing for downtime
-				{
-				  Iout = 0;
-				  age += dt / 1000;
-				}
-			if (age >= delay + downtime && age < delay + downtime + period - EPS) 
+		{	
+			if (age < period - EPS) 
 			// if the delay is over but not period
 			{
-				if (step > rEnd)
+				if (interage < ICI && cycle > 0) //if time isn't greater than the ICI
+					{
+				 	  Iout = 0;
+					  interage += dt/1000;
+					}
+				else if (step > rEnd && interage > ICI) 
 					{
 					  Iout = rEnd;
 					  age += dt / 1000;
@@ -88,56 +83,47 @@ void IAact::execute(void) {
 					  age += dt / 1000;
 					}
 			}
-			else if (interage < downtime)
-			{
-			Iout = 0;
-			interage += dt / 1000;
-			}
-			
 			else
 			{
 				age += dt/1000;
 			}
 			
-			if (age >= (period + downtime - EPS)) // if the time is greater than the period
+			if (age >= (period - EPS)) // if the time is greater than the period
  			{
 				step += step_size; // the steps increase
-				interage = 0;
 				age = 0;
 			}
 			
 		}
-		if (step > rEnd) {
+		if (step >= rEnd) 
+		{
 			cycle++;
 			step = 0;
+			interage = 0;
 		}
 	}
 
 	output(0) = Iout*.5*1e-3; //mAmps. Output to amp is scaled 50mv = 100 pA
 }
 
-void IAact::update(DefaultGUIModel::update_flags_t flag) {
+void MRT::update(DefaultGUIModel::update_flags_t flag) {
 	switch (flag) {
 		case INIT:
 			setParameter("Period (s)", period);
-			setParameter("Delay (s)", delay);
 			setParameter("Current Range Start (pA)", rStart);
 			setParameter("Current Range End (pA)", rEnd);
 			setParameter("Increment (pA)", step_size);
 			setParameter("Cycles (#)", Ncycles);
-			setParameter("Down Time (s)", downtime); 
-			setParameter("Offset (mA)", offset);
+			setParameter("Inter-Cycle-Interval (s)", ICI); 
 			break;
 
 		case MODIFY:
 			period = getParameter("Period (s)").toDouble();
-			delay = getParameter("Delay (s)").toDouble();
 			rStart = getParameter("Current Range Start (pA)").toDouble();
 			rEnd = getParameter("Current Range End (pA)").toDouble();
 			step_size = getParameter("Increment (pA)").toInt();
 			Ncycles = getParameter("Cycles (#)").toInt();
-			downtime = getParameter("Down Time (s)").toDouble();
-			offset = getParameter("Offset (mA)").toDouble();
+			ICI = getParameter("Inter-Cycle-Interval (s)").toDouble();
 			break;
 
 		case PAUSE:
@@ -171,11 +157,6 @@ void IAact::update(DefaultGUIModel::update_flags_t flag) {
 	if (step_size < 0) {
 		step_size = 0;
 		setParameter("Increment (pA)", step_size);
-	}
-	
-	if (delay <= 0 || delay > period) {
-		delay = 0;
-		setParameter("Delay (sec)", delay);
 	}
 	//Initialize counters
 	age = 0;
