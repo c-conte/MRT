@@ -23,12 +23,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <default_gui_model.h>
 #include <string>
 
-class IAact : public DefaultGUIModel {
+class MRT : public DefaultGUIModel {
 	
 	public:
-		IAact(void);
+		MRT(void);
 		virtual
-		~IAact(void);
+		~MRT(void);
 		virtual void
 		execute(void);
 	
@@ -41,14 +41,12 @@ class IAact : public DefaultGUIModel {
 
 		double dt;
 		double period;
-		double delay;
 		double rStart, rEnd;
 		int step_size;
 		int Ncycles;
 		int cycle;
 		double maxAmp;
-		double downtime;
-		double offset;	
+		double ICI;
 		double deltaI;
 		double step, age, interage;	
 };
