@@ -47,6 +47,7 @@ class MRT : public DefaultGUIModel {
 		int cycle;
 		double maxAmp;
 		double ICI;
+		double Downtime;
 		double deltaI;
-		double step, age, interage;	
+		double step, age, interage, time;	
 };

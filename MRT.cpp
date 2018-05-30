@@ -41,12 +41,16 @@ static DefaultGUIModel::variable_t vars[] =
 	{ "Cycles (#)", "How many times to repeat the protocol",
 		DefaultGUIModel::PARAMETER | DefaultGUIModel::UINTEGER, },
 	{ "Inter-Cycle-Interval (s)", "The time between each cycle where the protocol isn't running (Iout is 0)",
-		DefaultGUIModel::PARAMETER | DefaultGUIModel::DOUBLE, },
+	  DefaultGUIModel::PARAMETER | DefaultGUIModel::DOUBLE, },
+	{ "Downtime (s)", "The time between each step where the protocol isn't running (Iout is 0)",
+	  DefaultGUIModel::PARAMETER | DefaultGUIModel::DOUBLE, },
+	
+	
 };
 
 static size_t num_vars = sizeof(vars) / sizeof(DefaultGUIModel::variable_t);
 
-MRT::MRT(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::getInstance()->getPeriod() * 1e-6), period(0.25), rStart(-100), rEnd(380), step_size(20), Ncycles(1), ICI(5) {
+MRT::MRT(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::getInstance()->getPeriod() * 1e-6), period(1), rStart(-100), rEnd(380), step_size(20), Ncycles(1), ICI(5), Downtime(1) {
 	setWhatsThis("<p><b>I-Step:</b><br>This module generates a series of currents in a designated range followed by a fixed maximum current.</p>");
 	createGUI(vars, num_vars);
 	update(INIT);
@@ -63,8 +67,8 @@ void MRT::execute(void) {
 	if (cycle < Ncycles) // if the program isn't done cycling
  {
 		if (step < rEnd + step_size) // if the current output is less highest desired output
-		{	
-			if (age < period - EPS) 
+	        {
+		        if (age < (period  - EPS)) 
 			// if the delay is over but not period
 			{
 				if (interage < ICI && cycle > 0) //if time isn't greater than the ICI
@@ -72,34 +76,42 @@ void MRT::execute(void) {
 				 	  Iout = 0;
 					  interage += dt/1000;
 					}
-				else if (step > rEnd && interage > ICI) 
+				else if (step > rEnd && interage >= ICI) 
 					{
 					  Iout = rEnd;
 					  age += dt / 1000;
+					  time = 0;
 					}
 				else 
 					{
 					  Iout = (Iout + rStart + step);
 					  age += dt / 1000;
+					  time = 0;
 					}
 			}
 			else
 			{
 				age += dt/1000;
 			}
+			if (time < Downtime && age >= period)
+			  {
+			    Iout = 0;
+			    time += dt/1000;
+			  }
 			
-			if (age >= (period - EPS)) // if the time is greater than the period
+			if (age >= (period - EPS) && time >= Downtime) // if the time is greater than the period
  			{
 				step += step_size; // the steps increase
 				age = 0;
-			}
-			
+				time = 0;
+			}	
 		}
 		if (step >= rEnd) 
 		{
 			cycle++;
 			step = 0;
 			interage = 0;
+			time = 0;
 		}
 	}
 
@@ -114,7 +126,8 @@ void MRT::update(DefaultGUIModel::update_flags_t flag) {
 			setParameter("Current Range End (pA)", rEnd);
 			setParameter("Increment (pA)", step_size);
 			setParameter("Cycles (#)", Ncycles);
-			setParameter("Inter-Cycle-Interval (s)", ICI); 
+			setParameter("Inter-Cycle-Interval (s)", ICI);
+			setParameter("Downtime (s)", Downtime);
 			break;
 
 		case MODIFY:
@@ -124,6 +137,7 @@ void MRT::update(DefaultGUIModel::update_flags_t flag) {
 			step_size = getParameter("Increment (pA)").toInt();
 			Ncycles = getParameter("Cycles (#)").toInt();
 			ICI = getParameter("Inter-Cycle-Interval (s)").toDouble();
+			Downtime = getParameter("Downtime (s)").toDouble();
 			break;
 
 		case PAUSE:
