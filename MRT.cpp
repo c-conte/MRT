@@ -50,7 +50,7 @@ static DefaultGUIModel::variable_t vars[] =
 
 static size_t num_vars = sizeof(vars) / sizeof(DefaultGUIModel::variable_t);
 
-MRT::MRT(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::getInstance()->getPeriod() * 1e-6), period(1), rStart(-100), rEnd(380), step_size(20), Ncycles(1), ICI(5), Downtime(1) {
+MRT::MRT(void) : DefaultGUIModel("MRT", ::vars, ::num_vars), dt(RT::System::getInstance()->getPeriod() * 1e-6), period(0.250), rStart(-100), rEnd(380), step_size(20), Ncycles(1), ICI(5), Downtime(0.556) {
 	setWhatsThis("<p><b>I-Step:</b><br>This module generates a series of currents in a designated range followed by a fixed maximum current.</p>");
 	createGUI(vars, num_vars);
 	update(INIT);
@@ -115,13 +115,13 @@ void MRT::execute(void) {
 		}
 	}
 
-	output(0) = Iout*.5*1e-3; //mAmps. Output to amp is scaled 50mv = 100 pA
+	output(0) = (Iout*.5*1e-3); //mAmps. Output to amp is scaled 50mv = 100 pA
 }
 
 void MRT::update(DefaultGUIModel::update_flags_t flag) {
 	switch (flag) {
 		case INIT:
-			setParameter("Period (s)", period);
+		        setParameter("Period (s)", period);
 			setParameter("Current Range Start (pA)", rStart);
 			setParameter("Current Range End (pA)", rEnd);
 			setParameter("Increment (pA)", step_size);
@@ -153,7 +153,7 @@ void MRT::update(DefaultGUIModel::update_flags_t flag) {
 	// Some Error Checking for fun
 	
 	if (period <= 0) {
-		period = 1;
+		period = 0.25;
 		setParameter("Period (sec)", period);
 	}
 	
